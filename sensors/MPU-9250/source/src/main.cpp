@@ -165,11 +165,12 @@ void loop()
         roll *= RAD_TO_DEG;
 
         cnt = (cnt+1)%FILTER;
+        
         lin_ax = ax + a31;
         lin_ay = ay + a32;
         lin_az = az - a33;
 
-        if (transmit >= 20000) // transmit every 20ms (50Hz)
+        if (transmit >= 17000) // transmit every 17ms (~60Hz)
         {
             float txYaw=0;
             for(int x = 0; x<FILTER ;x++) {
@@ -201,7 +202,14 @@ void loop()
             Serial.print(", ");
             Serial.print(roll, 2);
             Serial.print(", ");
-            Serial.println(1. / deltat);
+            Serial.print(1. / deltat);
+            Serial.print(", ");
+            Serial.print(lin_ax, 2);
+            Serial.print(", ");
+            Serial.print(lin_ay, 2);
+            Serial.print(", ");
+            Serial.print(lin_az, 2);
+            Serial.println();
             transmit = 0;
         }
     }
