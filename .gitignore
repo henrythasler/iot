@@ -30,3 +30,7 @@
 
 # Debug files
 *.dSYM/
+
+#other stuff
+sensors/MPU-9250/webserver/models
+sensors/MPU-9250/webserver/src/password.h

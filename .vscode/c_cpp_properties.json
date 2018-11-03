@@ -3,10 +3,15 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
-                "~/.platformio/**"
+                "${workspaceRoot}/**",
+                "~/.platformio/**",
+                "${workspaceFolder}/sensors/MPU-9250/serial-interface/lib/quaternionFilters"
             ],
             "defines": [],
+            "browse.path": [
+                "${workspaceRoot}",
+                "~/.platformio"
+            ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
