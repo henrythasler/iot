@@ -1,6 +1,10 @@
 #include <Arduino.h>
+#include <WiFi.h>
 
 constexpr int ledBuiltin = LED_BUILTIN;
+
+constexpr int RX1 = 4; // GPIO 4 (Header J3, Pin 10)
+constexpr int TX1 = 5; // GPIO 5 (Header J3, Pin 11)
 
 uint32_t initStage = 0;
 
@@ -12,8 +16,14 @@ uint32_t counter1s = 0;
 uint32_t task50msTimer = 0;
 uint32_t counter50ms = 0;
 
-// HSV->RGB conversion based on GLSL version
+// multi-purpose static bytearray
+uint8_t txBuffer[256];
+uint8_t rxBuffer[256];
+
 float rgbCol[3];
+
+// HSV->RGB conversion based on GLSL version
+// from https://gist.github.com/postspectacular/2a4a8db092011c6743a7
 // expects hsv channels defined in 0.0 .. 1.0 interval
 float fract(float x) { return x - int(x); }
 float mix(float a, float b, float t) { return a + (b - a) * t; }
@@ -37,8 +47,19 @@ void setup()
   Serial.println("[  INIT  ] Hichi IR TTL 1.0");
   initStage++;
 
+  Serial.printf("[  INIT  ] %s (Rev. %d)   Cores: %d   CpuFreq: %uMHz   Flash: %uKiB   Heap: %uKiB   MAC: %s   Sdk: %s\n",
+                ESP.getChipModel(),
+                ESP.getChipRevision(),
+                ESP.getChipCores(),
+                ESP.getCpuFreqMHz(),
+                ESP.getFlashChipSize() / 1024,
+                ESP.getHeapSize() / 1024,
+                WiFi.macAddress().c_str(),
+                ESP.getSdkVersion());
+  initStage++;
+
   // Serial port for communication with the IR-Transceiver
-  Serial1.begin(300u, SERIAL_7E1);
+  Serial1.begin(300u, SERIAL_7E1, RX1, TX1);
   Serial.print("[  INIT  ] IR-Transceiver enabled\n");
 
   // all done
@@ -57,7 +78,7 @@ void loop()
 
 #ifdef BOARD_HAS_NEOPIXEL
     hsv2rgb(float(counter50ms % 60) / 60., 1.0, 1.0, rgbCol);
-    neopixelWrite(LED_BUILTIN, rgbCol[0] * 32, rgbCol[1] * 32, rgbCol[2] * 32);
+    neopixelWrite(ledBuiltin, rgbCol[0] * 32, rgbCol[1] * 32, rgbCol[2] * 32);
 #endif
 
     return;
@@ -70,6 +91,14 @@ void loop()
     counter1s++;
 
     Serial1.print("/?!\r\n");
+
+    int received = Serial1.read(rxBuffer, sizeof(rxBuffer) - 1);
+    if (received > 0)
+    {
+      rxBuffer[received] = 0;
+      Serial.printf("[   IR   ] %s\n", rxBuffer);
+    }
+
     return;
   }
 }
