@@ -77,7 +77,7 @@ void loop()
     counter50ms++;
 
 #ifdef BOARD_HAS_NEOPIXEL
-    hsv2rgb(float(counter50ms % 60) / 60., 1.0, 1.0, rgbCol);
+    hsv2rgb(float(counter50ms % 120) / 120., 1.0, 1.0, rgbCol);
     neopixelWrite(ledBuiltin, rgbCol[0] * 32, rgbCol[1] * 32, rgbCol[2] * 32);
 #endif
 
