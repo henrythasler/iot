@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# docker run --rm -ti -p 5000:5000 registry:2
+# docker build -t localhost:5000/python3-serial .
+# docker push localhost:5000/python3-serial
+# docker pull 192.168.178.30:5000/python3-serial
+# docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 -v /home/henry/dev:/host/dev 192.168.178.30:5000/python3-serial python /host/dev/hichi-bridge.py
+
 import os
-from time import sleep, time
+from time import sleep, time, mktime
 from datetime import datetime
 import paho.mqtt.client as mqtt
 import json
-
+import psycopg
 import serial
 
 SILENT = 0
@@ -107,37 +113,50 @@ class Mqtt(object):
 
 if __name__ == "__main__":
     with Mqtt(host="omv4", debug_level=TRACE) as mqtt_client:
-        with EnergyMeter(port="/dev/ttyUSB0", debug_level=TRACE) as meter:
+        with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
+            with conn.cursor() as cur:
+                with EnergyMeter(port="/dev/ttyUSB0", debug_level=TRACE) as meter:
 
-            wattage = None
-            prev_consumption = None
-            prev_time = time()
+                    wattage = None
 
-            try:
-                while True:
-                    consumption = meter.readConsumption()
+                    lastValues = cur.execute("SELECT * FROM power_consumption ORDER BY timestamp DESC LIMIT 1").fetchone()
+                    prev_consumption = lastValues[1]
+                    prev_time = mktime(lastValues[0].timetuple())
 
-                    if consumption:
-                        if prev_consumption and (consumption > prev_consumption):
-                            wattage = (consumption - prev_consumption) * \
-                                3600 / (time() - prev_time) * 1000
-                            prev_time = time()
-                            prev_consumption = consumption
+                    print("Last database entry: {} kWh on {}".format(prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
 
-                            mqtt_client.publishObject("home/energy/power/wattage", round(wattage, 2), "W", True)
-                            mqtt_client.publish("home/energy/power/wattage/value", '{0:0.1f}'.format(wattage), True)
+                    try:
+                        while True:
+                            consumption = meter.readConsumption()
 
-                            mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
-                            mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
+                            if consumption:
+                                if prev_consumption and (consumption > prev_consumption):
+                                    wattage = (consumption - prev_consumption) * \
+                                        3600 / (time() - prev_time) * 1000
+                                    prev_time = time()
+                                    prev_consumption = consumption
 
-                        if not prev_consumption:
-                            prev_consumption = consumption
-                            prev_time = time()
+                                    mqtt_client.publishObject("home/energy/power/wattage", round(wattage, 2), "W", True)
+                                    mqtt_client.publish("home/energy/power/wattage/value", '{0:0.1f}'.format(wattage), True)
 
-                            mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
-                            mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
+                                    mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
+                                    mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
 
-                    sleep(60)
+                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (datetime.utcnow(), consumption))
+                                    cur.execute("INSERT INTO power_wattage (timestamp, wattage) VALUES (%s, %s)", (datetime.utcnow(), round(wattage, 2)))
+                                    conn.commit()
 
-            except KeyboardInterrupt:
-                print("cancel")
+                                if not prev_consumption:
+                                    prev_consumption = consumption
+                                    prev_time = time()
+
+                                    mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
+                                    mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
+
+                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (datetime.utcnow(), consumption))
+                                    conn.commit()
+
+                            sleep(25)
+
+                    except KeyboardInterrupt:
+                        print("cancel")
