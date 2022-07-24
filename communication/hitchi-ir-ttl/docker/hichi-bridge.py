@@ -28,22 +28,20 @@ class EnergyMeter(object):
     def __init__(self, port="/dev/ttyUSB0", debug_level=SILENT, timeout=1):
         self.debug_level = debug_level
         self.connected = False
+        self.port = port
+        self.timeout = timeout
 
+    def __enter__(self):
+        """Class can be used in with-statement"""
         self.serialInterface = serial.Serial(
-            port=port,
+            port=self.port,
             baudrate=300,
             bytesize=7,
             parity=serial.PARITY_EVEN,
             stopbits=1,
-            timeout=timeout)
+            timeout=self.timeout)
 
-        if self.serialInterface.is_open:
-            self.debug("opened port {}".format(port), INFO)
-        else:
-            self.debug("Could not open {}".format(port), ERROR)
-
-    def __enter__(self):
-        """Class can be used in with-statement"""
+        self.debug("opened port {}".format(self.port), INFO)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -75,14 +73,14 @@ class Mqtt(object):
         self.host = host
         self.connected = False
 
+    def __enter__(self):
+        """Class can be used in with-statement"""
         self.client = mqtt.Client('iot-{}-{}'.format("meter", os.getpid()))
         self.client.on_connect = self.on_connect
 
         self.client.connect(self.host)
         self.client.loop_start()
 
-    def __enter__(self):
-        """Class can be used in with-statement"""
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -96,7 +94,7 @@ class Mqtt(object):
 
     def publish(self, topic, data, retain=False):
         if self.connected:
-            self.client.publish(topic, data, retain)
+            self.client.publish(topic, data, qos=0, retain=retain)
 
     def on_connect(self, client, userdata, flags, rc):
         self.debug("Connected to mqtt broker: " + self.host, TRACE)
@@ -108,7 +106,7 @@ class Mqtt(object):
             "timestamp": int(time()),
             "unit": unit
         }
-        self.publish(topic, json.dumps(dict), retain)
+        self.publish(topic, json.dumps(dict), retain=retain)
 
 
 if __name__ == "__main__":
@@ -119,11 +117,13 @@ if __name__ == "__main__":
 
                     wattage = None
 
-                    lastValues = cur.execute("SELECT * FROM power_consumption ORDER BY timestamp DESC LIMIT 1").fetchone()
+                    lastValues = cur.execute(
+                        "SELECT * FROM power_consumption ORDER BY timestamp DESC LIMIT 1").fetchone()
                     prev_consumption = lastValues[1]
                     prev_time = mktime(lastValues[0].timetuple())
 
-                    print("Last database entry: {} kWh on {}".format(prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
+                    print("Last database entry: {} kWh on {} UTC".format(
+                        prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
 
                     try:
                         while True:
@@ -131,29 +131,39 @@ if __name__ == "__main__":
 
                             if consumption:
                                 if prev_consumption and (consumption > prev_consumption):
+                                    # calculate wattage from consumption and time difference
                                     wattage = (consumption - prev_consumption) * \
                                         3600 / (time() - prev_time) * 1000
                                     prev_time = time()
                                     prev_consumption = consumption
 
-                                    mqtt_client.publishObject("home/energy/power/wattage", round(wattage, 2), "W", True)
-                                    mqtt_client.publish("home/energy/power/wattage/value", '{0:0.1f}'.format(wattage), True)
+                                    mqtt_client.publishObject(
+                                        "home/energy/power/wattage", round(wattage, 2), "W", retain=True)
+                                    mqtt_client.publish(
+                                        "home/energy/power/wattage/value", '{0:0.1f}'.format(wattage), retain=True)
 
-                                    mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
-                                    mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
+                                    mqtt_client.publishObject(
+                                        "home/energy/power/consumption", consumption, "kWh", retain=True)
+                                    mqtt_client.publish(
+                                        "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
-                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (datetime.utcnow(), consumption))
-                                    cur.execute("INSERT INTO power_wattage (timestamp, wattage) VALUES (%s, %s)", (datetime.utcnow(), round(wattage, 2)))
+                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
+                                        datetime.utcnow(), consumption))
+                                    cur.execute("INSERT INTO power_wattage (timestamp, wattage) VALUES (%s, %s)", (
+                                        datetime.utcnow(), round(wattage, 2)))
                                     conn.commit()
 
                                 if not prev_consumption:
                                     prev_consumption = consumption
                                     prev_time = time()
 
-                                    mqtt_client.publishObject("home/energy/power/consumption", consumption, "kWh", True)
-                                    mqtt_client.publish("home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), True)
+                                    mqtt_client.publishObject(
+                                        "home/energy/power/consumption", consumption, "kWh", retain=True)
+                                    mqtt_client.publish(
+                                        "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
-                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (datetime.utcnow(), consumption))
+                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
+                                        datetime.utcnow(), consumption))
                                     conn.commit()
 
                             sleep(25)
