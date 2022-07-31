@@ -9,7 +9,7 @@
 
 import os
 from time import sleep, time, mktime
-from datetime import datetime
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 import json
 import psycopg
@@ -56,12 +56,16 @@ class EnergyMeter(object):
         if self.serialInterface.is_open:
             self.serialInterface.write(b"/?!\x0d\x0a")
 
+            lines=0
             line = ""
-            while not '1.8.0(' in str(line):
+            while not '1.8.0(' in str(line) and lines < 32:
                 line = self.serialInterface.readline()
+                lines=lines+1
 
             if '1.8.0(' in str(line):
                 return float(line[6:14])
+            else:
+                self.debug("Could not find consumption in meter response (lines={})".format(lines), ERROR)
         else:
             self.debug("Serial interface not available", ERROR)
         return None
@@ -95,6 +99,8 @@ class Mqtt(object):
     def publish(self, topic, data, retain=False):
         if self.connected:
             self.client.publish(topic, data, qos=0, retain=retain)
+        else:
+            self.debug("No connection to MQTT broker!", ERROR)
 
     def on_connect(self, client, userdata, flags, rc):
         self.debug("Connected to mqtt broker: " + self.host, TRACE)
@@ -122,12 +128,14 @@ if __name__ == "__main__":
                     prev_consumption = lastValues[1]
                     prev_time = mktime(lastValues[0].timetuple())
 
-                    print("Last database entry: {} kWh on {} UTC".format(
-                        prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
+                    print("Last database entry: {} kWh on {} ({})".format(
+                        prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S'), prev_time))
 
                     try:
                         while True:
                             consumption = meter.readConsumption()
+
+                            print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
 
                             if consumption:
                                 if prev_consumption and (consumption > prev_consumption):
@@ -148,9 +156,9 @@ if __name__ == "__main__":
                                         "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
                                     cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
-                                        datetime.utcnow(), consumption))
+                                        datetime.now(timezone.utc), consumption))
                                     cur.execute("INSERT INTO power_wattage (timestamp, wattage) VALUES (%s, %s)", (
-                                        datetime.utcnow(), round(wattage, 2)))
+                                        datetime.now(timezone.utc), round(wattage, 2)))
                                     conn.commit()
 
                                 if not prev_consumption:
@@ -163,7 +171,7 @@ if __name__ == "__main__":
                                         "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
                                     cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
-                                        datetime.utcnow(), consumption))
+                                        datetime.now(timezone.utc), consumption))
                                     conn.commit()
 
                             sleep(25)
