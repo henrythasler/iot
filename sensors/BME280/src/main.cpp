@@ -82,12 +82,12 @@ void setup()
         environmentSensorAvailable = true;
 
         // Setup Environment Sensor
-        bme.setSampling(Adafruit_BME280::MODE_NORMAL,     /* Operating Mode. */
-                        Adafruit_BME280::SAMPLING_X16,    /* Temp. oversampling */
-                        Adafruit_BME280::SAMPLING_X16,    /* Hum. oversampling */
-                        Adafruit_BME280::SAMPLING_X16,    /* Pressure oversampling */
-                        Adafruit_BME280::FILTER_X16,      /* Filtering. */
-                        Adafruit_BME280::STANDBY_MS_500); /* Standby time. */
+        bme.setSampling(Adafruit_BME280::MODE_NORMAL,     /* Operating Mode: Continuous sampling*/
+                        Adafruit_BME280::SAMPLING_X16,    /* Temp. oversampling: Set to max to reduce noise */
+                        Adafruit_BME280::SAMPLING_X16,    /* Hum. oversampling: Set to max to reduce noise */
+                        Adafruit_BME280::SAMPLING_X16,    /* Pressure oversampling: Set to max to reduce noise */
+                        Adafruit_BME280::FILTER_X16,      /* Filtering: Set to max to reduce noise */
+                        Adafruit_BME280::STANDBY_MS_10);  /* Standby time: Use High-Frequency sampling with maximum filter to minimize noise*/
         Serial.printf("[  INIT  ] found BME280 environment sensor (ID 0x%02X)\n", bme.sensorID());
     }
     else
