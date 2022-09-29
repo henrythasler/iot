@@ -6,8 +6,8 @@ uint32_t initStage = 0;
 uint64_t timestamp = 0;
 
 bool triggered = false;
-static int32_t debounceTimeout = 300;
-int32_t debounceTimer = 0;
+static uint64_t debounceTimeout = 300;
+uint64_t debounceTimer = 0;
 int32_t triggerCounter = 0;
 
 uint64_t lastIsr = 0;
@@ -24,6 +24,37 @@ void onInterrupt()
     debounceTimer = timestamp;
     lastIsr = timestamp;
   }
+}
+
+
+size_t print64(uint64_t number, int base)
+{
+    size_t n = 0;
+    unsigned char buf[64];
+    uint8_t i = 0;
+
+    if (number == 0)
+    {
+        n += Serial.print((char)'0');
+        return n;
+    }
+
+    if (base < 2) base = 2;
+    else if (base > 16) base = 16;
+
+    while (number > 0)
+    {
+        uint64_t q = number/base;
+        buf[i++] = number - q*base;
+        number = q;
+    }
+
+    for (; i > 0; i--)
+    n += Serial.write((char) (buf[i - 1] < 10 ?
+    '0' + buf[i - 1] :
+    'A' + buf[i - 1] - 10));
+
+    return n;
 }
 
 void setup()
@@ -53,7 +84,9 @@ void loop()
     {
       triggerCounter++;
       // Serial.print("[  ISR   ] Trigger! ");
-      Serial.print("{\"counter\":");Serial.print(triggerCounter);Serial.print("}");
+      Serial.print("{\"counter\":");Serial.print(triggerCounter);
+      Serial.print(",\"timestamp\":");print64(timestamp, 10);
+      Serial.println("}");
     }
 
     triggered = false;
