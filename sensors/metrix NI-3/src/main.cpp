@@ -2,12 +2,11 @@
 
 #define REED_INPUT (2)
 
-uint32_t initStage = 0;
 uint64_t timestamp = 0;
 
 static int32_t debounceThresold = 2; // need that many consecutive readings for an edge
 int32_t debounceCounter = 0;
-int32_t inputState = HIGH;
+int32_t inputState = -1;
 
 int64_t pulseCounter = 0;
 

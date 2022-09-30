@@ -124,8 +124,8 @@ if __name__ == "__main__":
                     wattage = None
 
                     lastValues = cur.execute(
-                        "SELECT * FROM power_consumption ORDER BY timestamp DESC LIMIT 1").fetchone()
-                    prev_consumption = lastValues[1]
+                        "SELECT * FROM consumption WHERE type='strom' ORDER BY timestamp DESC LIMIT 1").fetchone()
+                    prev_consumption = lastValues[2]
                     prev_time = mktime(lastValues[0].timetuple())
 
                     print("Last database entry: {} kWh on {} ({})".format(
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                         while True:
                             consumption = meter.readConsumption()
 
-                            print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
+                            #print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
 
                             if consumption:
                                 if prev_consumption and (consumption > prev_consumption):
@@ -155,7 +155,7 @@ if __name__ == "__main__":
                                     mqtt_client.publish(
                                         "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
-                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
+                                    cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'strom', %s)", (
                                         datetime.now(timezone.utc), consumption))
                                     cur.execute("INSERT INTO power_wattage (timestamp, wattage) VALUES (%s, %s)", (
                                         datetime.now(timezone.utc), round(wattage, 2)))
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                                     mqtt_client.publish(
                                         "home/energy/power/consumption/value", '{0:0.1f}'.format(consumption), retain=True)
 
-                                    cur.execute("INSERT INTO power_consumption (timestamp, consumption) VALUES (%s, %s)", (
+                                    cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'strom', %s)", (
                                         datetime.now(timezone.utc), consumption))
                                     conn.commit()
 

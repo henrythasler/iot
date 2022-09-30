@@ -52,7 +52,12 @@ class GasMeter(object):
     def readConsumption(self):
         if self.serialInterface.is_open:
             line = self.serialInterface.readline()
-            print(line)
+            try:
+                data = json.loads(line)
+            except:
+                data = None
+                print(line)
+            return data
         else:
             self.debug("Serial interface not available", ERROR)
         return None
@@ -66,7 +71,7 @@ class Mqtt(object):
 
     def __enter__(self):
         """Class can be used in with-statement"""
-        self.client = mqtt.Client('iot-{}-{}'.format("meter", os.getpid()))
+        self.client = mqtt.Client('iot-{}-{}'.format("gasmeter", os.getpid()))
         self.client.on_connect = self.on_connect
 
         self.client.connect(self.host)
@@ -106,11 +111,26 @@ if __name__ == "__main__":
     with Mqtt(host="omv4", debug_level=TRACE) as mqtt_client:
         with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
             with conn.cursor() as cur:
-                with GasMeter(port="/dev/ttyUSB1", debug_level=TRACE) as meter:
+                with GasMeter(port="/dev/ttyUSB1", debug_level=TRACE, timeout=None) as meter:
+                    
+                    lastValues = cur.execute(
+                        "SELECT * FROM consumption WHERE type='gas' ORDER BY timestamp DESC LIMIT 1").fetchone()
+                    initialReading = lastValues[2]
+                    prev_time = mktime(lastValues[0].timetuple())
 
+                    print("Last database entry: {} m³ on {} ({})".format(
+                        initialReading, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S'), prev_time))
+                    
                     try:
                         while True:
                             consumption = meter.readConsumption()
+                            if consumption:
+                                meterReading = initialReading + 0.01 * consumption["pulseCounter"]
+                                print("pulseCounter: {} => meterReading: {}".format(consumption["pulseCounter"], meterReading))
+                                
+                                cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'gas', %s)", (
+                                    datetime.now(timezone.utc), meterReading))
+                                
                             sleep(1)
 
                     except KeyboardInterrupt:
