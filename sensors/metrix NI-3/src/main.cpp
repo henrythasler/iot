@@ -19,8 +19,9 @@ size_t print64(uint64_t number, int base = 10);
 
 void setup()
 {
+  // set up GPIO
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(2, INPUT_PULLUP);
+  pinMode(REED_INPUT, INPUT_PULLUP);
 
   // Setup serial connection for debugging
   Serial.begin(115200U);
@@ -63,6 +64,12 @@ void loop()
         Serial.println("}");
       }
     }
+    else if (inputState == -1)
+    {
+      inputState = inputPin;
+      Serial.print("Initial state is ");
+      Serial.println(inputState ? "HIGH" : "LOW");
+    }
     return;
   }
 
@@ -84,7 +91,7 @@ size_t print64(uint64_t number, int base)
 
   if (number == 0)
   {
-    n += Serial.print((char)'0');
+    n += Serial.write((char)'0');
     return n;
   }
 
