@@ -5,7 +5,9 @@
 # docker build -t localhost:5000/python3-serial .
 # docker push localhost:5000/python3-serial
 # docker pull 192.168.178.30:5000/python3-serial
-# docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 -v /home/henry/dev:/host/dev 192.168.178.30:5000/python3-serial python /host/dev/hichi-bridge.py
+# docker run --rm -ti --device=/dev/ttyUSB1:/dev/ttyUSB1 -v /home/henry/dev:/host/dev 192.168.178.30:5000/python3-serial python /host/dev/metrix-bridge.py
+# docker run -d --device=/dev/ttyUSB1:/dev/ttyUSB1 --name metrix_bridge -v /home/henry/dev:/host/dev 192.168.178.30:5000/python3-serial python /host/dev/metrix-bridge.py
+
 
 import os
 from time import sleep, time, mktime
@@ -23,6 +25,10 @@ TRACE = 3
 
 def millis(): return int(round(time() * 1000))
 
+initialReading = None
+meterReading = None
+rawData = None
+prev_time = 0
 
 class GasMeter(object):
     def __init__(self, port="/dev/ttyUSB0", debug_level=SILENT, timeout=1):
@@ -73,6 +79,7 @@ class Mqtt(object):
         """Class can be used in with-statement"""
         self.client = mqtt.Client('iot-{}-{}'.format("gasmeter", os.getpid()))
         self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
 
         self.client.connect(self.host)
         self.client.loop_start()
@@ -97,6 +104,22 @@ class Mqtt(object):
     def on_connect(self, client, userdata, flags, rc):
         self.debug("Connected to mqtt broker: " + self.host, TRACE)
         self.connected = True
+        client.subscribe("home/energy/gas/reference")
+
+    def on_message(self, client, userdata, msg):
+        global initialReading, rawData, prev_time
+        
+        self.debug("Gas meter value: " + str(msg.topic) + ': ' + str(msg.payload), TRACE)
+        
+        prev_time = datetime.now(timezone.utc)
+       
+        if rawData:
+            initialReading = float(msg.payload) - 0.01 * rawData["pulseCounter"]
+            print("new meterReading: {} m³ on {}".format(initialReading + 0.01 * rawData["pulseCounter"], prev_time.strftime('%A %d-%m-%Y, %H:%M:%S')))
+        else:
+            initialReading = float(msg.payload)
+            print("new meterReading: {} m³ on {}".format(initialReading, prev_time.strftime('%A %d-%m-%Y, %H:%M:%S')))
+
 
     def publishObject(self, topic, value, unit, retain=False):
         dict = {
@@ -118,18 +141,24 @@ if __name__ == "__main__":
                     initialReading = lastValues[2]
                     prev_time = mktime(lastValues[0].timetuple())
 
-                    print("Last database entry: {} m³ on {} ({})".format(
-                        initialReading, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S'), prev_time))
+                    print("Last database entry: {} m³ on {}".format(
+                        initialReading, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
                     
                     try:
                         while True:
-                            consumption = meter.readConsumption()
-                            if consumption:
-                                meterReading = initialReading + 0.01 * consumption["pulseCounter"]
-                                print("pulseCounter: {} => meterReading: {}".format(consumption["pulseCounter"], meterReading))
+                            rawData = meter.readConsumption()
+                            if rawData:
+                                meterReading = initialReading + 0.01 * rawData["pulseCounter"]
+                                print("pulseCounter: {} => meterReading: {}".format(rawData["pulseCounter"], meterReading))
+                                
+                                mqtt_client.publishObject(
+                                    "home/energy/gas/consumption", meterReading, "m³", retain=True)
+                                mqtt_client.publish(
+                                    "home/energy/gas/consumption/value", '{0:0.1f}'.format(meterReading), retain=True)
                                 
                                 cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'gas', %s)", (
                                     datetime.now(timezone.utc), meterReading))
+                                conn.commit()
                                 
                             sleep(1)
 
