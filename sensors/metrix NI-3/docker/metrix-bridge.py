@@ -109,7 +109,7 @@ class Mqtt(object):
     def on_message(self, client, userdata, msg):
         global initialReading, rawData, prev_time
         
-        self.debug("Gas meter value: " + str(msg.topic) + ': ' + str(msg.payload), TRACE)
+        self.debug("Received reference value: " + str(msg.topic) + ': ' + str(msg.payload), TRACE)
         
         prev_time = datetime.now(timezone.utc)
        
