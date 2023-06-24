@@ -116,7 +116,7 @@ class Mqtt(object):
 
 
 if __name__ == "__main__":
-    with Mqtt(host="omv4", debug_level=TRACE) as mqtt_client:
+    with Mqtt(host="omv4.fritz.box", debug_level=TRACE) as mqtt_client:
         with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
             with conn.cursor() as cur:
                 with EnergyMeter(port="/dev/ttyUSB0", debug_level=TRACE) as meter:

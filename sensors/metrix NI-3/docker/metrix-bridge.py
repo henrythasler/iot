@@ -62,7 +62,8 @@ class GasMeter(object):
                 data = json.loads(line)
             except:
                 data = None
-                print(line)
+                if len(line):
+                    print(line)
             return data
         else:
             self.debug("Serial interface not available", ERROR)
@@ -131,10 +132,10 @@ class Mqtt(object):
 
 
 if __name__ == "__main__":
-    with Mqtt(host="omv4", debug_level=TRACE) as mqtt_client:
+    with Mqtt(host="omv4.fritz.box", debug_level=TRACE) as mqtt_client:
         with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
             with conn.cursor() as cur:
-                with GasMeter(port="/dev/ttyUSB1", debug_level=TRACE, timeout=None) as meter:
+                with GasMeter(port="/dev/ttyUSB1", debug_level=TRACE, timeout=60) as meter:
                     
                     lastValues = cur.execute(
                         "SELECT * FROM consumption WHERE type='gas' ORDER BY timestamp DESC LIMIT 1").fetchone()
@@ -142,7 +143,10 @@ if __name__ == "__main__":
                     prev_time = mktime(lastValues[0].timetuple())
 
                     print("Last database entry: {} m³ on {}".format(
-                        initialReading, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S')))
+                        initialReading, lastValues[0].astimezone(timezone.utc).strftime('%A %d-%m-%Y, %H:%M:%S')))
+
+                    nextDbUpdate = int(time()) + 3600 * 6
+                    meterReading = initialReading
                     
                     try:
                         while True:
@@ -155,11 +159,15 @@ if __name__ == "__main__":
                                     "home/energy/gas/consumption", meterReading, "m³", retain=True)
                                 mqtt_client.publish(
                                     "home/energy/gas/consumption/value", '{0:0.1f}'.format(meterReading), retain=True)
+
+                                nextDbUpdate = int(time())
                                 
+                            if int(time()) >= nextDbUpdate:
                                 cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'gas', %s)", (
                                     datetime.now(timezone.utc), meterReading))
                                 conn.commit()
-                                
+                                nextDbUpdate = int(time()) + 3600 * 6
+
                             sleep(1)
 
                     except KeyboardInterrupt:
