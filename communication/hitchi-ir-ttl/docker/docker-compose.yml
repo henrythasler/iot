@@ -1,12 +1,14 @@
 services:
   hichi:
-    image: python3-serial:3
+    image: python3-serial
     container_name: hichi-ir-ttl
     restart: unless-stopped
     ports:
-      - "8010:8010"
+      - "9400:9400"
     networks:
       - database
+    environment:
+      - PROMETHEUS_PORT=9400
     volumes:
       - type: bind
         source: ./hichi-bridge.py

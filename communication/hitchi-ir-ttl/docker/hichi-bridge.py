@@ -133,14 +133,16 @@ if __name__ == "__main__":
                         prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S'), prev_time))
                     
                     # Start up the server to expose the metrics.
-                    server, t = start_http_server(os.environ.get("PROMETHEUS_PORT", "8010"))
+                    port = int(os.environ.get("PROMETHEUS_PORT", "9400"))
+                    print("PROMETHEUS_PORT={}".format(port))
+                    server, t = start_http_server(port)
                     gauge = Gauge('power_grid_consumption', 'Total sum of energy consumption from the grid in kwh')
 
                     try:
                         while True:
                             consumption = meter.readConsumption()
 
-                            #print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
+                            # print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
 
                             if consumption:
                                 gauge.set(consumption)
