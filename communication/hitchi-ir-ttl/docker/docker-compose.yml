@@ -1,0 +1,22 @@
+services:
+  hichi:
+    image: python3-serial:3
+    container_name: hichi-ir-ttl
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    networks:
+      - database
+    volumes:
+      - type: bind
+        source: ./hichi-bridge.py
+        target: /app/app.py
+        read_only: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    command: python -u /app/app.py
+
+networks:
+  database:
+    name: database
+    external: true

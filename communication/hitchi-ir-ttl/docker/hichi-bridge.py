@@ -14,6 +14,7 @@ import paho.mqtt.client as mqtt
 import json
 import psycopg
 import serial
+from prometheus_client import start_http_server, Gauge
 
 SILENT = 0
 ERROR = 1
@@ -79,7 +80,7 @@ class Mqtt(object):
 
     def __enter__(self):
         """Class can be used in with-statement"""
-        self.client = mqtt.Client('iot-{}-{}'.format("meter", os.getpid()))
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, 'iot-{}-{}'.format("meter", os.getpid()))
         self.client.on_connect = self.on_connect
 
         self.client.connect(self.host)
@@ -130,6 +131,10 @@ if __name__ == "__main__":
 
                     print("Last database entry: {} kWh on {} ({})".format(
                         prev_consumption, lastValues[0].strftime('%A %d-%m-%Y, %H:%M:%S'), prev_time))
+                    
+                    # Start up the server to expose the metrics.
+                    server, t = start_http_server(os.environ.get("PROMETHEUS_PORT", "8010"))
+                    gauge = Gauge('power_grid_consumption', 'Total sum of energy consumption from the grid in kwh')
 
                     try:
                         while True:
@@ -138,6 +143,7 @@ if __name__ == "__main__":
                             #print("{} {}kWh".format(datetime.now().strftime('%A %d-%m-%Y, %H:%M:%S'), consumption))
 
                             if consumption:
+                                gauge.set(consumption)
                                 if prev_consumption and (consumption > prev_consumption):
                                     # calculate wattage from consumption and time difference
                                     wattage = (consumption - prev_consumption) * \
@@ -178,3 +184,5 @@ if __name__ == "__main__":
 
                     except KeyboardInterrupt:
                         print("cancel")
+                        server.shutdown()
+                        t.join()
