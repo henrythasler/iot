@@ -16,6 +16,7 @@ import paho.mqtt.client as mqtt
 import json
 import psycopg
 import serial
+from prometheus_client import start_http_server, Gauge
 
 SILENT = 0
 ERROR = 1
@@ -78,7 +79,7 @@ class Mqtt(object):
 
     def __enter__(self):
         """Class can be used in with-statement"""
-        self.client = mqtt.Client('iot-{}-{}'.format("gasmeter", os.getpid()))
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, 'iot-{}-{}'.format("gasmeter", os.getpid()))
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
@@ -147,6 +148,13 @@ if __name__ == "__main__":
 
                     nextDbUpdate = int(time()) + 3600 * 6
                     meterReading = initialReading
+
+                    # Start up the server to expose the metrics.
+                    port = int(os.environ.get("PROMETHEUS_PORT", "9400"))
+                    print("PROMETHEUS_PORT={}".format(port))
+                    server, t = start_http_server(port)
+                    gauge = Gauge('gas_grid_consumption', 'Total sum of gas consumption from the grid in m3')
+                    gauge.set(meterReading)
                     
                     try:
                         while True:
@@ -155,6 +163,8 @@ if __name__ == "__main__":
                                 meterReading = initialReading + 0.01 * rawData["pulseCounter"]
                                 print("pulseCounter: {} => meterReading: {}".format(rawData["pulseCounter"], meterReading))
                                 
+                                gauge.set(meterReading)
+
                                 mqtt_client.publishObject(
                                     "home/energy/gas/consumption", meterReading, "m³", retain=True)
                                 mqtt_client.publish(
@@ -172,3 +182,5 @@ if __name__ == "__main__":
 
                     except KeyboardInterrupt:
                         print("cancel")
+                        server.shutdown()
+                        t.join()
