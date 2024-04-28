@@ -20,7 +20,7 @@ RUN apk upgrade --update \
 #
 ### python libraries
     && python3 -m pip install --upgrade pip \
-    && python3 -m pip install -U pyserial paho-mqtt psycopg[binary] \
+    && python3 -m pip install -U pyserial paho-mqtt psycopg[binary] prometheus-client \
 #
 ### clean up files
 #    && apk del .build-deps .build-deps-edge .build-deps-testing .build-deps-community \
