@@ -16,6 +16,7 @@ import paho.mqtt.client as mqtt
 import json
 import psycopg
 import serial
+from prometheus_client import start_http_server, Gauge
 
 SILENT = 0
 ERROR = 1
@@ -78,7 +79,7 @@ class Mqtt(object):
 
     def __enter__(self):
         """Class can be used in with-statement"""
-        self.client = mqtt.Client('iot-{}-{}'.format("gasmeter", os.getpid()))
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, 'iot-{}-{}'.format("gasmeter", os.getpid()))
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
@@ -102,18 +103,18 @@ class Mqtt(object):
         else:
             self.debug("No connection to MQTT broker!", ERROR)
 
-    def on_connect(self, client, userdata, flags, rc):
+    def on_connect(self, client, userdata, flags, reason_code, properties):
         self.debug("Connected to mqtt broker: " + self.host, TRACE)
         self.connected = True
         client.subscribe("home/energy/gas/reference")
 
     def on_message(self, client, userdata, msg):
         global initialReading, rawData, prev_time
-        
+
         self.debug("Received reference value: " + str(msg.topic) + ': ' + str(msg.payload), TRACE)
-        
+
         prev_time = datetime.now(timezone.utc)
-       
+
         if rawData:
             initialReading = float(msg.payload) - 0.01 * rawData["pulseCounter"]
             print("new meterReading: {} m³ on {}".format(initialReading + 0.01 * rawData["pulseCounter"], prev_time.strftime('%A %d-%m-%Y, %H:%M:%S')))
@@ -136,7 +137,7 @@ if __name__ == "__main__":
         with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
             with conn.cursor() as cur:
                 with GasMeter(port="/dev/ttyUSB1", debug_level=TRACE, timeout=60) as meter:
-                    
+
                     lastValues = cur.execute(
                         "SELECT * FROM consumption WHERE type='gas' ORDER BY timestamp DESC LIMIT 1").fetchone()
                     initialReading = lastValues[2]
@@ -147,21 +148,30 @@ if __name__ == "__main__":
 
                     nextDbUpdate = int(time()) + 3600 * 6
                     meterReading = initialReading
-                    
+
+                    # Start up the server to expose the metrics.
+                    port = int(os.environ.get("PROMETHEUS_PORT", "9400"))
+                    print("PROMETHEUS_PORT={}".format(port))
+                    server, t = start_http_server(port)
+                    gauge = Gauge('gas_grid_consumption', 'Total sum of gas consumption from the grid in m3')
+                    gauge.set(meterReading)
+
                     try:
                         while True:
                             rawData = meter.readConsumption()
                             if rawData:
                                 meterReading = initialReading + 0.01 * rawData["pulseCounter"]
                                 print("pulseCounter: {} => meterReading: {}".format(rawData["pulseCounter"], meterReading))
-                                
+
+                                gauge.set(meterReading)
+
                                 mqtt_client.publishObject(
                                     "home/energy/gas/consumption", meterReading, "m³", retain=True)
                                 mqtt_client.publish(
                                     "home/energy/gas/consumption/value", '{0:0.1f}'.format(meterReading), retain=True)
 
                                 nextDbUpdate = int(time())
-                                
+
                             if int(time()) >= nextDbUpdate:
                                 cur.execute("INSERT INTO consumption (timestamp, type, value) VALUES (%s, 'gas', %s)", (
                                     datetime.now(timezone.utc), meterReading))
@@ -172,3 +182,5 @@ if __name__ == "__main__":
 
                     except KeyboardInterrupt:
                         print("cancel")
+                        server.shutdown()
+                        t.join()

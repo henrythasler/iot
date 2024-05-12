@@ -80,7 +80,7 @@ class Mqtt(object):
 
     def __enter__(self):
         """Class can be used in with-statement"""
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, 'iot-{}-{}'.format("meter", os.getpid()))
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, 'iot-{}-{}'.format("meter", os.getpid()))
         self.client.on_connect = self.on_connect
 
         self.client.connect(self.host)
@@ -103,7 +103,7 @@ class Mqtt(object):
         else:
             self.debug("No connection to MQTT broker!", ERROR)
 
-    def on_connect(self, client, userdata, flags, rc):
+    def on_connect(self, client, userdata, flags, reason_code, properties):
         self.debug("Connected to mqtt broker: " + self.host, TRACE)
         self.connected = True
 
