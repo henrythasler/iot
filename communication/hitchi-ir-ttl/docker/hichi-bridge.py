@@ -61,6 +61,7 @@ class EnergyMeter(object):
             line = ""
             while not '1.8.0(' in str(line) and lines < 32:
                 line = self.serialInterface.readline()
+                self.debug(line, TRACE)
                 lines=lines+1
 
             if '1.8.0(' in str(line):
@@ -104,7 +105,7 @@ class Mqtt(object):
             self.debug("No connection to MQTT broker!", ERROR)
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
-        self.debug("Connected to mqtt broker: " + self.host, TRACE)
+        self.debug("Connected to mqtt broker: " + self.host, INFO)
         self.connected = True
 
     def publishObject(self, topic, value, unit, retain=False):
@@ -120,7 +121,7 @@ if __name__ == "__main__":
     with Mqtt(host="omv4.fritz.box", debug_level=TRACE) as mqtt_client:
         with psycopg.connect("dbname='home' user='postgres' host='omv4.fritz.box' password='postgres'") as conn:
             with conn.cursor() as cur:
-                with EnergyMeter(port="/dev/ttyUSB0", debug_level=TRACE) as meter:
+                with EnergyMeter(port="/dev/ttyUSB0", debug_level=INFO) as meter:
 
                     wattage = None
 
